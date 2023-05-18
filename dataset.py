@@ -22,7 +22,7 @@ class Video:
     i.e img_001=frames[0], img_001=frames[1], img_002=frames[2], ...)
     """
     path: Path
-    frames: List[path]
+    frames: List[Path]
 
     def __init__(self, video_path: Path):
         self.path = video_path
@@ -77,16 +77,19 @@ class VideoDataset(Dataset):
     def __len__(self) -> int:
         return len(self.videos)
 
-    def __getitem__(self, index: int):
-        video = self.videos[index] 
+    def __getitem__(self, video_index: int):
+        video = self.videos[video_index] 
 
         # frame_indices = self._get_random_frame_indices_from_each_segment(video) # TAMNet normal sampling
         images = []
         for i in self._get_sample_indices(video):
             for j in range(self.num_consecutive_frames):
-                index = min(i+j, len(video)-1) # next frame or last frame
-                images.extend(self._load_frames(video.frames[index]))
+                frame_index = min(i+j, len(video)-1) # next frame or last frame
+                images.extend(self._load_frames(video, frame_index))
 
+        if self.transform is None: 
+            return images
+        
         return self.transform(images)
     
     def _get_sample_indices(self, video: Video) -> np.ndarray:
