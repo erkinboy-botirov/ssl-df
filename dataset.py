@@ -80,10 +80,13 @@ class VideoDataset(Dataset):
     def __getitem__(self, index: int):
         video = self.videos[index] 
 
-        frame_indices = self._get_sample_indices(video)
         # frame_indices = self._get_random_frame_indices_from_each_segment(video) # TAMNet normal sampling
-        images = [self._load_frame(video, i) for i in frame_indices]
-        
+        images = []
+        for i in self._get_sample_indices(video):
+            for j in range(self.num_consecutive_frames):
+                index = min(i+j, len(video)-1) # next frame or last frame
+                images.extend(self._load_frames(video.frames[index]))
+
         return self.transform(images)
     
     def _get_sample_indices(self, video: Video) -> np.ndarray:
@@ -130,9 +133,9 @@ class VideoDataset(Dataset):
         # for i in range()
         return [randrange(i, i + segment_length) for i in range(self.num_segments)]
     
-    def _load_frame(self, video: Video, index: int) -> Image.Image:
+    def _load_frames(self, video: Video, index: int) -> List[Image.Image]:
         image = Image.open(video.frames[index]).convert('RGB')
         image_copy = image.copy()
         image.close()
 
-        return image_copy
+        return [image_copy]
