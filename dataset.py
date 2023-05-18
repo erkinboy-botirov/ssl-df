@@ -79,17 +79,14 @@ class VideoDataset(Dataset):
 
     def __getitem__(self, index: int):
         video = self.videos[index] 
-        
-        if self.dense_sampling:
-            frame_indices = self._get_start_index_of_each_segment(video)
-        else:
-            frame_indices = self._get_random_frame_indices_from_each_segment(video)
 
+        frame_indices = self._get_sample_indices(video)
+        # frame_indices = self._get_random_frame_indices_from_each_segment(video) # TAMNet normal sampling
         images = [self._load_frame(video, i) for i in frame_indices]
         
         return self.transform(images)
     
-    def _get_sample_indices(self, video: Video) -> List[int]:
+    def _get_sample_indices(self, video: Video) -> np.ndarray:
         max_frame_index = max(0, len(video) - self.num_consecutive_frames)
         
         if self.dense_sampling:
@@ -127,12 +124,6 @@ class VideoDataset(Dataset):
             indices = np.random.choice(max_frame_index, total_frames, replace=False)
         
         return np.sort(indices)
-
-
-    def _get_start_index_of_each_segment(self, video: Video) -> List[int]:
-        stride = len(video.frames) // self.num_segments
-        for i in range(0, len(video), stride):
-            yield i
 
     def _get_random_frame_indices_from_each_segment(self, video: Video) -> List[int]:
         segment_length = len(video) // self.num_segments
