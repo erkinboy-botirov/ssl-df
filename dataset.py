@@ -6,6 +6,8 @@ from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 from typing import List
 
+import numpy as np
+
 
 ALLOWED_IMAGE_EXTENSIONS = ('.jpg', '.png', '.tif', '.tiff')
 
@@ -45,6 +47,7 @@ class VideoDataset(Dataset):
     dense_sampling: bool
     modality: Modality
     num_consecutive_frames: int
+    transform: Compose
 
     def __init__(self, dataset_path: Path, num_groups: int = 64, frames_per_group: int = 4, dense_sampling: bool = False, 
                  modality: Modality = Modality.RGB, num_consecutive_frames: int = 1, transform: Compose = None):
@@ -58,8 +61,8 @@ class VideoDataset(Dataset):
             transform (Compose): the transformer for preprocessing
         
         Argments have different meaning when dense_sampling is True:
-            - num_groups ==> num of frames in a sample
-            - frames_per_group ==> sample every Kth frame
+            - num_groups ==> num of samples (sample consists of 1 frame)
+            - frames_per_group ==> sampling rate
         """
         self.path = dataset_path
         # load only dirs that has at least one image. Later we may change minimum number of images required
@@ -69,6 +72,7 @@ class VideoDataset(Dataset):
         self.dense_sampling = dense_sampling
         self.modality = modality
         self.num_consecutive_frames = num_consecutive_frames
+        self.transform = transform
 
     def __len__(self) -> int:
         return len(self.videos)
@@ -87,15 +91,44 @@ class VideoDataset(Dataset):
     
     def _get_sample_indices(self, video: Video) -> List[int]:
         max_frame_index = max(0, len(video) - self.num_consecutive_frames)
-        if self.dense_sampling:
-            highest_start_index = max_frame_index - self.sampling_rate * self.sampling_size
-            random_offset = randrange(0, highest_start_index + 1) if highest_start_index > 0 else 0
-
-            return [random_offset + i * self.sampling_rate for i in range(self.num_samples)]
         
+        if self.dense_sampling:
+            highest_start_index = max_frame_index - self.sampling_rate * self.num_samples
+            random_offset = randrange(0, highest_start_index + 1) if highest_start_index > 0 else 0
+            """
+            -------------------------------------------------- Full video
+            x---------x---------x---------x---------x--------- random_offset = 0
+            -x---------x---------x---------x---------x-------- random_offset = 1
+            -----x---------x---------x---------x---------x---- random_offset = randrange(0, highest_start_index)
+                 1    +    1    +    1    +    1    +    1     = sampling_size
+                 <----d---->                                   = sampling_rate
+            """
+            return [(random_offset + i * self.sampling_rate) % len(video) 
+                    for i in range(self.num_samples)]
+        
+        """
+        num_groups = 8, frames_per_group = 4
+        -xx-x--x -xx-x--x -xx-x--x -xx-x--x -xx-x--x -xx-x--x -xx-x--x -xx-x--x
+        """
         total_frames = self.num_groups * self.frames_per_group
         avg_frames_per_group = max_frame_index // self.num_groups
-    
+        if avg_frames_per_group >= self.frames_per_group:
+            # randomly sample f images per segement
+            indices = np.arange(0, self.num_groups) * avg_frames_per_group
+            indices = np.repeat(indices, repeats=self.frames_per_group)
+            offsets = np.random.choice(avg_frames_per_group, self.frames_per_group, replace=False)
+            offsets = np.tile(offsets, self.num_groups)
+            indices = indices + offsets
+        elif max_frame_index < total_frames:
+            # need to sample the same images
+            indices = np.random.choice(max_frame_index, total_frames)
+        else:
+            # sample cross all images
+            indices = np.random.choice(max_frame_index, total_frames, replace=False)
+        
+        return np.sort(indices)
+
+
     def _get_start_index_of_each_segment(self, video: Video) -> List[int]:
         stride = len(video.frames) // self.num_segments
         for i in range(0, len(video), stride):
