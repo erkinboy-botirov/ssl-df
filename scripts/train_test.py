@@ -1,5 +1,4 @@
 import os
-import random
 import shutil
 
 def split_data_folders(left_folder, right_folder, output_folder, train_ratio, test_ratio): #val_ratio):
