@@ -3,26 +3,11 @@ import sys
 sys.path.append(os.getcwd())
 import torchvision
 import random
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image, ImageOps
 import numpy as np
 import numbers
 import math
 import torch
-
-
-class MedianSmoothing(object):
-    """Applies median smoothing to the input PIL.Image or numpy array.
-    radius: the radius of the median filter window
-    """
-    def __init__(self, radius):
-        self.radius = radius
-
-    def __call__(self, img):
-        if isinstance(img, np.ndarray):
-            img = Image.fromarray(img)
-
-        return img.filter(ImageFilter.MedianFilter(radius=self.radius))
-    
     
 class GroupRandomCrop(object):
     def __init__(self, size):
