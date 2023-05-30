@@ -248,3 +248,16 @@ parser.add_argument(
     action="store_true", 
     help='use dense sample for video dataset'
 )
+# SimSiam args
+
+parser.add_argument(
+    '--pred-dim', 
+    default=512, 
+    type=int,
+    help='hidden dimension of the predictor (default: 512)'
+)
+parser.add_argument(
+    '--fix-pred-lr', 
+    action='store_true',
+    help='Fix learning rate for the predictor'
+)

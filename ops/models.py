@@ -28,7 +28,8 @@ class TSN(nn.Module):
                  pretrain='imagenet',
                  tam=False,
                  fc_lr5=False,
-                 non_local=False):
+                 non_local=False,
+                 pred_dim=512):
         super(TSN, self).__init__()
         self.modality = modality
         self.num_segments = num_segments
@@ -87,6 +88,11 @@ class TSN(nn.Module):
         self._enable_pbn = partial_bn
         if partial_bn:
             self.partialBN(True)
+
+        self.predictor = nn.Sequential(nn.Linear(num_class, pred_dim, bias=False),
+                                        nn.BatchNorm1d(num_class),
+                                        nn.ReLU(inplace=True), # hidden layer
+                                        nn.Linear(pred_dim, num_class)) # output layer 
 
     def _prepare_tsn(self, num_class):
         feature_dim = getattr(self.base_model,
@@ -285,48 +291,30 @@ class TSN(nn.Module):
                 'name': "custom_ops"
             },
             # for fc
-            {
-                'params': lr5_weight,
-                'lr_mult': 5,
-                'decay_mult': 1,
-                'name': "lr5_weight"
-            },
-            {
-                'params': lr10_bias,
-                'lr_mult': 10,
-                'decay_mult': 0,
-                'name': "lr10_bias"
-            },
+            # {
+            #     'params': lr5_weight,
+            #     'lr_mult': 5,
+            #     'decay_mult': 1,
+            #     'name': "lr5_weight"
+            # },
+            # {
+            #     'params': lr10_bias,
+            #     'lr_mult': 10,
+            #     'decay_mult': 0,
+            #     'name': "lr10_bias"
+            # },
         ]
 
         return params_group
 
-    def forward(self, input, no_reshape=False):
-        if not no_reshape:
-            sample_len = (3 if self.modality == "RGB" else 2) * self.new_length
+    def forward(self, x1, x2, no_reshape=False):
+        z1 = self.base_model(x1)
+        z2 = self.base_model(x2)
 
-            if self.modality == 'RGBDiff':
-                sample_len = 3 * self.new_length
-                input = self._get_diff(input)
+        p1 = self.predictor(z1)
+        p2 = self.predictor(z1)
 
-            base_out = self.base_model(
-                input.view((-1, sample_len) + input.size()[-2:]))
-        else:
-            base_out = self.base_model(input)
-
-        #print('1:base_out=', base_out.size())
-        if self.dropout > 0:
-            base_out = self.new_fc(base_out)
-
-        #print('2:base_out=', base_out.size())
-        if not self.before_softmax:
-            base_out = self.softmax(base_out)
-
-        base_out = base_out.view((-1, self.num_segments) + base_out.size()[1:])
-        #print('3:base_out=', base_out.size())
-        output = self.consensus(base_out)
-        #print('4:base_out=', output.size())
-        return output.squeeze(1)
+        return p1, p2, z1.detach(), z2.detach()
 
     def _get_diff(self, input, keep_rgb=False):
         input_c = 3 if self.modality in ["RGB", "RGBDiff"] else 2

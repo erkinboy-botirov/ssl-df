@@ -29,12 +29,13 @@ from ops.utils import AverageMeter, accuracy
 from tensorboardX import SummaryWriter
 
 
-# best_prec1 = 0
+best_prec1 = 0
+global args
 
 def main():
     # let's get rid of this global variables later
     # I hate working with them
-    # global args, best_prec1
+    global args, best_prec1
     
     # this parser looks clean, let's keep it this way for now
     args = parser.parse_args()
@@ -90,7 +91,9 @@ def main():
     train_augmentation = model.get_augmentation(flip=flip,
                                                 dataset=args.dataset)
     model = torch.nn.DataParallel(model, device_ids=args.gpus).cuda()
-    optimizer = torch.optim.SGD(policies,
+    # SimSiam optimizer params
+    optim_params = [{'params': model.module.predictor.parameters(), 'fix_lr': args.fix_pred_lr}]
+    optimizer = torch.optim.SGD(policies + optim_params,
                                 args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
@@ -268,26 +271,30 @@ def train(train_loader, model, criterion, optimizer, epoch, log, tf_writer):
     model.train()
 
     end = time.time()
-    for i, (input, target) in enumerate(train_loader):
+    for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
-        target = target.cuda()
-        input_var = torch.autograd.Variable(input)
-        target_var = torch.autograd.Variable(target)
+        # target = target.cuda()
+        images[0] = torch.autograd.Variable(images[0])
+        images[1] = torch.autograd.Variable(images[1])
+        # target_var = torch.autograd.Variable(target)
 
         # compute output
-        output = model(input_var)
-        loss = criterion(output, target_var)
+        p1, p2, z1, z2 = model(x1=images[0], x2=images[1])
+        loss = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
+        # loss = criterion(output, target_var)
 
         # measure accuracy and record loss
-        prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
+        # prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
         losses.update(loss.item(), input.size(0))
-        top1.update(prec1.item(), input.size(0))
-        top5.update(prec5.item(), input.size(0))
+        # top1.update(prec1.item(), input.size(0))
+        # top5.update(prec5.item(), input.size(0))
 
         # compute gradient and do SGD step
+        optimizer.zero_grad()
         loss.backward()
+        optimizer.step()
 
         if args.clip_gradient is not None:
             total_norm = clip_grad_norm_(model.parameters(),
@@ -305,16 +312,14 @@ def train(train_loader, model, criterion, optimizer, epoch, log, tf_writer):
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                       'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                      'Prec@5 {top5.val:.3f} ({top5.avg:.3f})\t'
+                    #   'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                    #   'Prec@5 {top5.val:.3f} ({top5.avg:.3f})\t'
                       'Mem {mem:}'.format(epoch,
                                           i,
                                           len(train_loader),
                                           batch_time=batch_time,
                                           data_time=data_time,
                                           loss=losses,
-                                          top1=top1,
-                                          top5=top5,
                                           lr=optimizer.param_groups[-1]['lr'] *
                                           0.1,
                                           mem=mem))  # TODO
@@ -322,8 +327,8 @@ def train(train_loader, model, criterion, optimizer, epoch, log, tf_writer):
             log.write(output + '\n')
             log.flush()
     tf_writer.add_scalar('loss/train', losses.avg, epoch)
-    tf_writer.add_scalar('acc/train_top1', top1.avg, epoch)
-    tf_writer.add_scalar('acc/train_top5', top5.avg, epoch)
+    # tf_writer.add_scalar('acc/train_top1', top1.avg, epoch)
+    # tf_writer.add_scalar('acc/train_top5', top5.avg, epoch)
     tf_writer.add_scalar('lr', optimizer.param_groups[-1]['lr'], epoch)
 
 
