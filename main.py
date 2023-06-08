@@ -202,10 +202,7 @@ def main():
                                              pin_memory=True)
 
     # define loss function (criterion) and optimizer
-    if args.loss_type == 'nll':
-        criterion = torch.nn.CrossEntropyLoss().cuda()
-    else:
-        raise ValueError("Unknown loss type")
+    criterion = torch.nn.CosineSimilarity(dim=1).cuda(args.gpu)
 
     for group in policies:
         print(('group: {} has {} params, lr_mult: {}, decay_mult: {}'.format(
