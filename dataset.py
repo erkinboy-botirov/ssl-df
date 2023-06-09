@@ -125,11 +125,9 @@ class ImgPairDataset(Dataset):
             random_offset = randrange(0, highest_start_index + 1) if highest_start_index > 0 else 0
             """
             -------------------------------------------------- Full video
-            x---------x---------x---------x---------x--------- random_offset = 0
-            -x---------x---------x---------x---------x-------- random_offset = 1
-            -----x---------x---------x---------x---------x---- random_offset = randrange(0, highest_start_index)
-                 1    +    1    +    1    +    1    +    1     = sampling_size
-                 <----d---->                                   = sampling_rate
+            -----x---------x---------x---------x-------------- random_offset = randrange(0, highest_start_index)
+                 1    +    1    +    1    +    1               = num_saples = 4
+                 <--------->                                   = sampling_rate = 10
             """
             return [(random_offset + i * self.sampling_rate) % len(video) 
                     for i in range(self.num_samples)]
